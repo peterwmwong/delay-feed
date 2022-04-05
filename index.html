@@ -9,6 +9,7 @@
         height: 100%;
         padding: 0;
         margin: 0;
+        background: black;
     }
 
     #sourceVideo,
@@ -51,7 +52,7 @@
     <video id="sourceVideo" autoplay></video>
     <video id="liveFeedVideo" autoplay></video>
     <div id="delayedFeed">
-        <canvas id="delayedFeedCanvas" width="240" height="180"></canvas>
+        <canvas id="delayedFeedCanvas"></canvas>
         <div id="delayedFeedCaption">Delayed Feed</div>
     </div>
     <script>
@@ -62,28 +63,35 @@
         const delayedFeedCanvas = document.querySelector('#delayedFeedCanvas');
         const ctx = delayedFeedCanvas.getContext('2d');
         (async () => {
-            let prevSrc = '';
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            liveFeedVideo.srcObject = stream;
-            const recorder = new MediaRecorder(stream);
-            recorder.addEventListener('dataavailable', ({ data }) => {
-                blobList.push(data);
-                const prevTime = sourceVideo.currentTime;
-                const revokeSrc = prevSrc;
-                const src = URL.createObjectURL(new Blob(blobList, { type: data.type }));
-                prevSrc = src;
-                sourceVideo.src = src;
-                sourceVideo.currentTime = prevTime;
-                if (revokeSrc) window.requestAnimationFrame(() => URL.revokeObjectURL(revokeSrc));
-            });
-            recorder.start(DELAY);
-            const renderVideoToCanvasLoop = () => {
-                window.requestAnimationFrame(() => {
-                    ctx.drawImage(sourceVideo, 0, 0, delayedFeedCanvas.width, delayedFeedCanvas.height);
-                    renderVideoToCanvasLoop();
+            try {
+                let prevSrc = '';
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                const { aspectRatio, width, height } = stream.getTracks()[0].getSettings();
+                sourceVideo.width = width;
+                sourceVideo.height = height;
+                delayedFeedCanvas.width = width * .75;
+                delayedFeedCanvas.height = height * .75;
+                liveFeedVideo.srcObject = stream;
+                const recorder = new MediaRecorder(stream);
+                recorder.addEventListener('dataavailable', ({ data }) => {
+                    blobList.push(data);
+                    const prevTime = sourceVideo.currentTime;
+                    const revokeSrc = prevSrc;
+                    const src = URL.createObjectURL(new Blob(blobList, { type: data.type }));
+                    prevSrc = src;
+                    sourceVideo.src = src;
+                    sourceVideo.currentTime = prevTime;
+                    if (revokeSrc) window.requestAnimationFrame(() => URL.revokeObjectURL(revokeSrc));
                 });
-            }
-            renderVideoToCanvasLoop();
+                recorder.start(DELAY);
+                const renderVideoToCanvasLoop = () => {
+                    window.requestAnimationFrame(() => {
+                        ctx.drawImage(sourceVideo, 0, 0, delayedFeedCanvas.width, delayedFeedCanvas.height);
+                        renderVideoToCanvasLoop();
+                    });
+                }
+                renderVideoToCanvasLoop();
+            } catch (e) { alert(e) };
         })();
     </script>
 </body>
