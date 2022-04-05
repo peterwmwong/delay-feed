@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<title>delay feed</title>
+
+<body>
+    <canvas id="canvas" width="640" height="480" style="position: absolute;"></canvas>
+    <video id="video" autoplay style="opacity: 0; width: 640px; height: 480px; position: absolute;"></video>
+    <script>
+        const DELAY = 2000;
+        const blobList = [];
+        const video = document.querySelector('#video');
+        const canvas = document.querySelector('#canvas');
+        const ctx = canvas.getContext('2d');
+        (async () => {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const recorder = new MediaRecorder(stream)
+            recorder.addEventListener('dataavailable', ({ data }) => {
+                blobList.push(data);
+                const prevTime = video.currentTime;
+                const src = URL.createObjectURL(new Blob(blobList, { type: data.type }));
+                video.src = src;
+                video.currentTime = prevTime;
+            });
+            recorder.start(DELAY);
+            const renderVideoToCanvasLoop = () => {
+                window.requestAnimationFrame(() => {
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    renderVideoToCanvasLoop();
+                })
+            }
+            renderVideoToCanvasLoop();
+        })();
+    </script>
+</body>
+
+</html>
