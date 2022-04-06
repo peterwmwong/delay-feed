@@ -48,32 +48,28 @@
         <canvas id="delayedFeedCanvas"></canvas>
         <div id="delayedFeedCaption">Delayed Feed</div>
     </div>
-    <script>
-        const DELAY = 2000;
-        const liveFeedVideo = document.querySelector('#liveFeedVideo');
-        const tmpCanvas = document.createElement('canvas');
-        const tmpCtx = tmpCanvas.getContext('2d');
-        const delayedFeedCanvas = document.querySelector('#delayedFeedCanvas');
-        const ctx = delayedFeedCanvas.getContext('2d');
-        (async () => {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                liveFeedVideo.srcObject = stream;
-                const { width, height } = stream.getTracks()[0].getSettings();
-                const [delayedWidth, delayedHeight] = [width * .75, height * .75];
-                tmpCanvas.width = delayedFeedCanvas.width = delayedWidth;
-                tmpCanvas.height = delayedFeedCanvas.height = delayedHeight;
-                const renderVideoToCanvasLoop = () => {
-                    window.requestAnimationFrame(() => {
-                        tmpCtx.drawImage(liveFeedVideo, 0, 0, delayedWidth, delayedHeight);
-                        const frame = tmpCtx.getImageData(0, 0, delayedWidth, delayedHeight);
-                        setTimeout(() => ctx.putImageData(frame, 0, 0), DELAY);
-                        renderVideoToCanvasLoop();
-                    });
-                }
-                renderVideoToCanvasLoop();
-            } catch (e) { alert(e) };
-        })();
+    <script type="module">
+        try {
+            const DELAY_MS = 2000;
+            const { liveFeedVideo, delayedFeedCanvas } = window;
+            const captureCanvas = document.createElement('canvas');
+            const captureCtx = captureCanvas.getContext('2d');
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            liveFeedVideo.srcObject = stream;
+            const { width, height } = stream.getTracks()[0].getSettings();
+            const [delayedWidth, delayedHeight] = [width * .75, height * .75];
+            captureCanvas.width = delayedFeedCanvas.width = delayedWidth;
+            captureCanvas.height = delayedFeedCanvas.height = delayedHeight;
+            const renderVideoToCanvasLoop = () => {
+                window.requestAnimationFrame(() => {
+                    captureCtx.drawImage(liveFeedVideo, 0, 0, delayedWidth, delayedHeight);
+                    const frame = captureCtx.getImageData(0, 0, delayedWidth, delayedHeight);
+                    setTimeout(() => delayedFeedCanvas.getContext('2d').putImageData(frame, 0, 0), DELAY_MS);
+                    renderVideoToCanvasLoop();
+                });
+            }
+            renderVideoToCanvasLoop();
+        } catch (e) { alert(e) };
     </script>
 </body>
 
