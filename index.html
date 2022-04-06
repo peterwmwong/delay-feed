@@ -57,7 +57,6 @@
         const ctx = delayedFeedCanvas.getContext('2d');
         (async () => {
             try {
-                let prevSrc = '';
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 liveFeedVideo.srcObject = stream;
                 const { width, height } = stream.getTracks()[0].getSettings();
