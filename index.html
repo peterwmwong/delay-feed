@@ -33,10 +33,8 @@
         color: white;
         font-family: sans-serif;
         font-size: 2.5rem;
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
+        width: 100%;
+        position: relative;
         background-color: rgba(255.0, 0, 0, 0.75);
         text-align: center;
     }
@@ -45,30 +43,43 @@
 <body>
     <video id="liveFeedVideo" autoplay></video>
     <div id="delayedFeed">
-        <canvas id="delayedFeedCanvas"></canvas>
         <div id="delayedFeedCaption">Delayed Feed</div>
+        <video id="delayedFeedVideo" autoplay controls></video>
     </div>
     <script type="module">
         try {
-            const DELAY_MS = 2000;
-            const { liveFeedVideo, delayedFeedCanvas } = window;
-            const captureCanvas = document.createElement('canvas');
-            const captureCtx = captureCanvas.getContext('2d');
+            const DELAY_S = 2;
+            const DELAY_MS = DELAY_S * 1000;
+            const { liveFeedVideo, delayedFeedVideo } = window;
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
             liveFeedVideo.srcObject = stream;
             const { width, height } = stream.getTracks()[0].getSettings();
             const [delayedWidth, delayedHeight] = [width * .75, height * .75];
-            captureCanvas.width = delayedFeedCanvas.width = delayedWidth;
-            captureCanvas.height = delayedFeedCanvas.height = delayedHeight;
-            const renderVideoToCanvasLoop = () => {
-                window.requestAnimationFrame(() => {
-                    captureCtx.drawImage(liveFeedVideo, 0, 0, delayedWidth, delayedHeight);
-                    const frame = captureCtx.getImageData(0, 0, delayedWidth, delayedHeight);
-                    setTimeout(() => delayedFeedCanvas.getContext('2d').putImageData(frame, 0, 0), DELAY_MS);
-                    renderVideoToCanvasLoop();
+            delayedFeedVideo.width = delayedWidth;
+            delayedFeedVideo.height = delayedHeight;
+            const mediaSource = new MediaSource();
+            delayedFeedVideo.src = URL.createObjectURL(mediaSource);
+            mediaSource.addEventListener('sourceopen', () => {
+                URL.revokeObjectURL(delayedFeedVideo.src);
+                const recorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs="vp9"' });
+                const srcBuf = mediaSource.addSourceBuffer(recorder.mimeType);
+                srcBuf.addEventListener('update', () => {
+                    const { buffered } = srcBuf;
+                    if (buffered.length && buffered.end(0) - buffered.start(0) > DELAY_S * 6) {
+                        srcBuf.remove(buffered.start(0), buffered.start(0) + DELAY_S);
+                    }
                 });
-            }
-            renderVideoToCanvasLoop();
+                recorder.addEventListener('dataavailable', async ({ data }) => {
+                    const bytes = await data.arrayBuffer();
+                    const update = () => srcBuf.appendBuffer(bytes);
+                    if (srcBuf.updating) {
+                        srcBuf.addEventListener('update', update(), { once: true })
+                    } else {
+                        update();
+                    }
+                })
+                recorder.start(DELAY_MS);
+            }, { once: true });
         } catch (e) { alert(e) };
     </script>
 </body>
