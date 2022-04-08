@@ -18,11 +18,11 @@
         }
 
         #liveFeed,
-        #delayedCanvas {
+        #delayedFeedVideo {
             position: absolute;
         }
 
-        #delayedCanvas {
+        #delayedFeedVideo {
             width: 100%;
             height: 100%;
             object-fit: cover;
@@ -57,7 +57,7 @@
 </head>
 
 <body onclick="document.body.requestFullscreen({ navigationUI: 'hide' });">
-    <canvas id="delayedCanvas" class="mirror"></canvas>
+    <video id="delayedFeedVideo" class="mirror" autoplay controls></video>
     <div id="liveFeed">
         <div class="mirror">
             <video id="liveFeedVideo" autoplay></video>
@@ -68,8 +68,7 @@
         try {
             const DELAY_S = 2;
             const DELAY_MS = DELAY_S * 1000;
-            const { delayedCanvas, liveFeedVideo, liveFeed } = window;
-            const delayedCtx = delayedCanvas.getContext('2d', { alpha: false });
+            const { delayedFeedVideo, liveFeedVideo, liveFeed } = window;
             const captureCanvas = document.createElement('canvas');
             const captureCtx = captureCanvas.getContext('2d', { alpha: false });
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -84,8 +83,8 @@
             const { width, height, aspectRatio } = stream.getTracks()[0].getSettings();
             liveFeed.style.aspectRatio = `${aspectRatio}`
             const [delayedWidth, delayedHeight] = [width, height];
-            captureCanvas.width = delayedCanvas.width = delayedWidth;
-            captureCanvas.height = delayedCanvas.height = delayedHeight;
+            delayedFeedVideo.width = delayedWidth;
+            delayedFeedVideo.height = delayedHeight;
 
             const resizeliveFeedVideo = () => {
                 const tx = liveFeed.clientWidth / delayedWidth;
@@ -95,15 +94,33 @@
             window.onresize = resizeliveFeedVideo;
             resizeliveFeedVideo();
 
-            const renderVideoToCanvasLoop = () => {
-                window.requestAnimationFrame(() => {
-                    captureCtx.drawImage(liveFeedVideo, 0, 0, delayedWidth, delayedHeight);
-                    const frame = captureCtx.getImageData(0, 0, delayedWidth, delayedHeight);
-                    setTimeout(() => delayedCtx.putImageData(frame, 0, 0), DELAY_MS);
-                    renderVideoToCanvasLoop();
+            const mediaSource = new MediaSource();
+            delayedFeedVideo.src = URL.createObjectURL(mediaSource);
+            mediaSource.addEventListener('sourceopen', () => {
+                const mimeType = [
+                    'video/webm; codecs="vp8"', // Performs much better than vp9 on Pixel 3
+                    'video/mp4; codecs="avc1"'  // Safari
+                ].find(t => MediaRecorder.isTypeSupported(t));
+                const recorder = new MediaRecorder(stream, { mimeType });
+                const srcBuf = mediaSource.addSourceBuffer(mimeType);
+                srcBuf.addEventListener('update', () => {
+                    const { buffered } = srcBuf;
+                    if (buffered.length && buffered.end(0) - buffered.start(0) > DELAY_S * 6) {
+                        srcBuf.remove(buffered.start(0), buffered.start(0) + DELAY_S);
+                    }
+                    delayedFeedVideo.play();
                 });
-            }
-            renderVideoToCanvasLoop();
+                recorder.addEventListener('dataavailable', async ({ data }) => {
+                    const bytes = await data.arrayBuffer();
+                    const update = () => srcBuf.appendBuffer(bytes);
+                    if (srcBuf.updating) {
+                        srcBuf.addEventListener('update', update(), { once: true })
+                    } else {
+                        update();
+                    }
+                })
+                recorder.start(DELAY_MS);
+            }, { once: true });
         } catch (e) { alert(e) };
     </script>
 </body>
