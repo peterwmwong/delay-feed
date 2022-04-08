@@ -17,19 +17,19 @@
             font-size: 14px;
         }
 
-        #delayedFeed,
-        #liveFeedVideo {
+        #liveFeed,
+        #delayedCanvas {
             position: absolute;
         }
 
-        #liveFeedVideo {
+        #delayedCanvas {
             width: 100%;
             height: 100%;
             object-fit: cover;
             transform: scaleX(-1);
         }
 
-        #delayedFeed {
+        #liveFeed {
             bottom: 24px;
             right: 24px;
             box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5);
@@ -39,7 +39,7 @@
             overflow: hidden;
         }
 
-        #delayedFeedCaption {
+        #liveFeedCaption {
             color: white;
             position: relative;
             background-color: rgba(255, 0, 0, 0.5);
@@ -57,48 +57,49 @@
 </head>
 
 <body onclick="document.body.requestFullscreen({ navigationUI: 'hide' });">
-    <video id="liveFeedVideo" class="mirror" autoplay></video>
-    <div id="delayedFeed">
+    <canvas id="delayedCanvas" class="mirror"></canvas>
+    <div id="liveFeed">
         <div class="mirror">
-            <canvas id="delayedFeedCanvas"></canvas>
+            <video id="liveFeedVideo" autoplay></video>
         </div>
-        <div id="delayedFeedCaption">Delayed Feed</div>
+        <div id="liveFeedCaption">Live</div>
     </div>
     <script type="module">
         try {
             const DELAY_S = 2;
             const DELAY_MS = DELAY_S * 1000;
-            const { liveFeedVideo, delayedFeedCanvas, delayedFeed } = window;
+            const { delayedCanvas, liveFeedVideo, liveFeed } = window;
+            const delayedCtx = delayedCanvas.getContext('2d', { alpha: false });
             const captureCanvas = document.createElement('canvas');
-            const captureCtx = captureCanvas.getContext('2d');
+            const captureCtx = captureCanvas.getContext('2d', { alpha: false });
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: {
                     width: { ideal: Math.max(screen.width, screen.height) * 2 },
                     height: { ideal: Math.min(screen.width, screen.height) * 2 },
-                    frameRate: { ideal: 30 },
+                    frameRate: { ideal: 60 },
                     aspectRatio: { ideal: 1.777777777 }
                 }
             });
             liveFeedVideo.srcObject = stream;
             const { width, height, aspectRatio } = stream.getTracks()[0].getSettings();
-            delayedFeed.style.aspectRatio = `${aspectRatio}`
+            liveFeed.style.aspectRatio = `${aspectRatio}`
             const [delayedWidth, delayedHeight] = [width, height];
-            captureCanvas.width = delayedFeedCanvas.width = delayedWidth;
-            captureCanvas.height = delayedFeedCanvas.height = delayedHeight;
+            captureCanvas.width = delayedCanvas.width = delayedWidth;
+            captureCanvas.height = delayedCanvas.height = delayedHeight;
 
-            const resizeDelayedFeedVideo = () => {
-                const tx = delayedFeed.clientWidth / delayedWidth;
-                delayedFeedCanvas.style.transform = `scale3d(${tx}, ${tx}, 1)`;
-                delayedFeedCanvas.style.transformOrigin = 'top left';
+            const resizeliveFeedVideo = () => {
+                const tx = liveFeed.clientWidth / delayedWidth;
+                liveFeedVideo.style.transform = `scale3d(${tx}, ${tx}, 1)`;
+                liveFeedVideo.style.transformOrigin = 'top left';
             }
-            window.onresize = resizeDelayedFeedVideo;
-            resizeDelayedFeedVideo();
+            window.onresize = resizeliveFeedVideo;
+            resizeliveFeedVideo();
 
             const renderVideoToCanvasLoop = () => {
                 window.requestAnimationFrame(() => {
                     captureCtx.drawImage(liveFeedVideo, 0, 0, delayedWidth, delayedHeight);
                     const frame = captureCtx.getImageData(0, 0, delayedWidth, delayedHeight);
-                    setTimeout(() => delayedFeedCanvas.getContext('2d').putImageData(frame, 0, 0), DELAY_MS);
+                    setTimeout(() => delayedCtx.putImageData(frame, 0, 0), DELAY_MS);
                     renderVideoToCanvasLoop();
                 });
             }
