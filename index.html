@@ -26,17 +26,19 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
-            transform: scaleX(-1);
         }
 
         #liveFeed {
-            bottom: 24px;
-            right: 24px;
+            bottom: 72px;
+            right: 12px;
             box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5);
             background-color: rgba(0, 0, 0, 0.5);
             width: 33%;
-            aspect-ratio: 1 / 1;
             overflow: hidden;
+        }
+
+        #liveFeedVideo {
+            position: absolute;
         }
 
         #liveFeedCaption {
@@ -53,6 +55,11 @@
         .mirror {
             transform: scaleX(-1);
         }
+
+        video.mirror::-webkit-media-controls,
+        .mirror video::-webkit-media-controls {
+            transform: scaleX(-1);
+        }
     </style>
 </head>
 
@@ -65,12 +72,21 @@
         <div id="liveFeedCaption">Live</div>
     </div>
     <script type="module">
+        const waitForSettings = (stream) => new Promise((resolve) => {
+            const check = () => {
+                const settings = stream.getVideoTracks()[0].getSettings();
+                if (settings.width && settings.height) {
+                    resolve(settings);
+                } else {
+                    window.requestAnimationFrame(check)
+                }
+            };
+            check();
+        });
         try {
             const DELAY_S = 2;
             const DELAY_MS = DELAY_S * 1000;
             const { delayedFeedVideo, liveFeedVideo, liveFeed } = window;
-            const captureCanvas = document.createElement('canvas');
-            const captureCtx = captureCanvas.getContext('2d', { alpha: false });
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: {
                     width: { ideal: Math.max(screen.width, screen.height) * 2 },
@@ -80,15 +96,12 @@
                 }
             });
             liveFeedVideo.srcObject = stream;
-            const { width, height, aspectRatio } = stream.getTracks()[0].getSettings();
-            liveFeed.style.aspectRatio = `${aspectRatio}`
-            const [delayedWidth, delayedHeight] = [width, height];
-            delayedFeedVideo.width = delayedWidth;
-            delayedFeedVideo.height = delayedHeight;
+            const { width, height } = await waitForSettings(stream);
+            liveFeed.style.aspectRatio = width / height;
 
             const resizeliveFeedVideo = () => {
-                const tx = liveFeed.clientWidth / delayedWidth;
-                liveFeedVideo.style.transform = `scale3d(${tx}, ${tx}, 1)`;
+                const tx = liveFeed.clientWidth / width;
+                liveFeedVideo.style.transform = `scale(${tx})`;
                 liveFeedVideo.style.transformOrigin = 'top left';
             }
             window.onresize = resizeliveFeedVideo;
@@ -103,14 +116,14 @@
                 ].find(t => MediaRecorder.isTypeSupported(t));
                 const recorder = new MediaRecorder(stream, { mimeType });
                 const srcBuf = mediaSource.addSourceBuffer(mimeType);
-                srcBuf.addEventListener('update', () => {
+                srcBuf.onupdate = () => {
                     const { buffered } = srcBuf;
                     if (buffered.length && buffered.end(0) - buffered.start(0) > DELAY_S * 6) {
                         srcBuf.remove(buffered.start(0), buffered.start(0) + DELAY_S);
                     }
                     delayedFeedVideo.play();
-                });
-                recorder.addEventListener('dataavailable', async ({ data }) => {
+                };
+                recorder.ondataavailable = async ({ data }) => {
                     const bytes = await data.arrayBuffer();
                     const update = () => srcBuf.appendBuffer(bytes);
                     if (srcBuf.updating) {
@@ -118,7 +131,7 @@
                     } else {
                         update();
                     }
-                })
+                };
                 recorder.start(DELAY_MS);
             }, { once: true });
         } catch (e) { alert(e) };
